@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Building2, Calendar as CalendarIcon, Clock, CheckCircle, User, Mail, Phone, FileText, Users, ChevronRight, ChevronLeft } from "lucide-react";
 import { BookingService } from "@/services/bookingService";
+import { ArangamService } from "@/services/arangamService";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { BookingData } from "./BookingForm";
@@ -92,6 +93,7 @@ const BookingWorkflowDialog = ({
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
     const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
     const [bookedSlots, setBookedSlots] = useState<{ date: string; slot: string; arangam?: string }[]>([]);
+    const [arangamsList, setArangamsList] = useState<{ id: string; name: string }[]>([]);
 
     // Form data
     const [formData, setFormData] = useState({
@@ -112,6 +114,12 @@ const BookingWorkflowDialog = ({
     const [filteredDepartments, setFilteredDepartments] = useState<string[]>([]);
 
     // Initialize arangam and user data
+    useEffect(() => {
+        ArangamService.getActiveArangams().then(result => {
+            if (result.success && result.data) setArangamsList(result.data);
+        });
+    }, []);
+
     useEffect(() => {
         if (open) {
             setArangam(selectedArangam || null);
@@ -147,6 +155,15 @@ const BookingWorkflowDialog = ({
         }
     }, [selectedDate, arangam]);
 
+    // Realtime subscription to refresh slot availability
+    useEffect(() => {
+        if (!open) return;
+        const unsubscribe = BookingService.subscribeToBookings(() => {
+            if (selectedDate) fetchBookedSlots();
+        });
+        return () => unsubscribe();
+    }, [open, selectedDate, arangam]);
+
     const fetchBookedSlots = async () => {
         if (!selectedDate) return;
 
@@ -175,6 +192,10 @@ const BookingWorkflowDialog = ({
 
     const getArangamName = (id: string | null | undefined) => {
         if (!id) return null;
+        // Try dynamic arangams list first
+        const found = arangamsList.find(a => a.id === id);
+        if (found) return found.name;
+        // fallback
         const names: Record<string, string> = {
             "arangam-1": "VOC Arangam",
             "arangam-2": "Thiruvalluvar Arangam",

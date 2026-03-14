@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Calendar, Users, Clock, Building2, CheckCircle2, Shield, Eye, Download } from "lucide-react";
 import * as XLSX from 'xlsx';
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
@@ -36,6 +36,13 @@ const Index = ({ onShowDatabaseSetup }: IndexProps = {}) => {
   const [availableArangams, setAvailableArangams] = useState<{ id: string, name: string, slots: string[] }[]>([]);
   const [isLoadingArangams, setIsLoadingArangams] = useState(false);
 
+  // Refs to always have latest values inside real-time callback
+  const calendarSelectedDateRef = useRef<Date | null>(null);
+  const showAvailableSlotsRef = useRef(false);
+
+  useEffect(() => { calendarSelectedDateRef.current = calendarSelectedDate; }, [calendarSelectedDate]);
+  useEffect(() => { showAvailableSlotsRef.current = showAvailableSlots; }, [showAvailableSlots]);
+
   // Workflow dialog state
   const [workflowDialogOpen, setWorkflowDialogOpen] = useState(false);
   const [workflowArangam, setWorkflowArangam] = useState<string | null>(null);
@@ -49,42 +56,25 @@ const Index = ({ onShowDatabaseSetup }: IndexProps = {}) => {
     try {
       const result = await BookingService.getAllBookingsCombined();
       if (result.success && result.data) {
-        // Get active arangams to filter bookings
-        const arangamResult = await ArangamService.getActiveArangams();
-        const activeArangamNames = arangamResult.success && arangamResult.data 
-          ? arangamResult.data.map(a => a.name)
-          : [];
-        
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        
-        // Filter for upcoming events and only include booked/pending status
-        // Also filter out bookings for inactive/deleted arangams
+
         const upcomingFiltered = result.data
           .filter(booking => {
             const bookingDate = new Date(booking.booking_date);
             bookingDate.setHours(0, 0, 0, 0);
-            const isUpcoming = bookingDate >= today && (booking.status === 'booked' || booking.status === 'pending');
-            
-            // If arangam_name is null or 'MG Auditorium', always include
-            if (!booking.arangam_name || booking.arangam_name === 'MG Auditorium') {
-              return isUpcoming;
-            }
-            
-            // Otherwise, only include if arangam is active
-            return isUpcoming && activeArangamNames.includes(booking.arangam_name);
+            return bookingDate >= today && (booking.status === 'booked' || booking.status === 'pending');
           })
           .sort((a, b) => new Date(a.booking_date).getTime() - new Date(b.booking_date).getTime());
-        
-        // Remove duplicates based on unique combination of date, arangam, and slot
-        const uniqueEvents = upcomingFiltered.filter((booking, index, self) => 
-          index === self.findIndex(b => 
-            b.booking_date === booking.booking_date && 
-            b.arangam_name === booking.arangam_name && 
+
+        const uniqueEvents = upcomingFiltered.filter((booking, index, self) =>
+          index === self.findIndex(b =>
+            b.booking_date === booking.booking_date &&
+            b.arangam_name === booking.arangam_name &&
             b.slot_type === booking.slot_type
           )
         ).slice(0, 9);
-        
+
         setUpcomingEvents(uniqueEvents);
       }
     } catch (error) {
@@ -94,17 +84,16 @@ const Index = ({ onShowDatabaseSetup }: IndexProps = {}) => {
 
   useEffect(() => {
     fetchUpcomingEvents();
-    
-    // Auto-refresh every 2 seconds
-    const interval = setInterval(() => {
+
+    // Realtime subscription for instant updates
+    const unsubscribe = BookingService.subscribeToBookings(() => {
       fetchUpcomingEvents();
-      // Also refresh available arangams if showing that screen
       if (showAvailableSlots && calendarSelectedDate) {
         handleNextFromCalendar();
       }
-    }, 2000);
-    
-    return () => clearInterval(interval);
+    });
+
+    return () => unsubscribe();
   }, [showAvailableSlots, calendarSelectedDate]);
 
   // Auto-rotate events with faster fade transition
@@ -703,7 +692,7 @@ const Index = ({ onShowDatabaseSetup }: IndexProps = {}) => {
 
               <span className="relative z-10 flex items-center justify-center gap-2">
                 <Eye className="w-5 h-5" />
-                Booked Details
+                Booked Event Details
               </span>
             </button>
           </div>

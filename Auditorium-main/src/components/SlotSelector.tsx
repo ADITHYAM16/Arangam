@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Sun, Moon, Sunrise, Clock, Building2 } from "lucide-react";
 import { BookingService } from "@/services/bookingService";
+import { ArangamService, Arangam } from "@/services/arangamService";
 
 interface SlotSelectorProps {
   selectedDate: Date | null;
@@ -53,6 +54,19 @@ const SlotSelector = ({
   const [hoveredSlot, setHoveredSlot] = useState<string | null>(null);
   const [hoveredArangam, setHoveredArangam] = useState<string | null>(null);
   const [realTimeBookedSlots, setRealTimeBookedSlots] = useState<{ date: string; slot: string; arangam?: string }[]>([]);
+  const [arangams, setArangams] = useState<Arangam[]>([]);
+
+  useEffect(() => {
+    ArangamService.getActiveArangams().then(result => {
+      if (result.success && result.data) setArangams(result.data);
+    });
+    const unsubscribe = ArangamService.subscribeToArangams(() => {
+      ArangamService.getActiveArangams().then(result => {
+        if (result.success && result.data) setArangams(result.data);
+      });
+    });
+    return () => unsubscribe();
+  }, []);
 
   // Fetch real-time booked slots when date or arangam changes
   useEffect(() => {
@@ -91,6 +105,9 @@ const SlotSelector = ({
 
   const getArangamName = (id: string | null | undefined) => {
     if (!id) return null;
+    const found = arangams.find(a => a.id === id);
+    if (found) return found.name;
+    // fallback map for legacy IDs
     const names: Record<string, string> = {
       "arangam-1": "VOC Arangam",
       "arangam-2": "Thiruvalluvar Arangam",
@@ -177,22 +194,12 @@ const SlotSelector = ({
             Select Arangam
           </h3>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-            {[1, 2, 3, 4, 5].map((num) => {
-              const arangamId = `arangam-${num}`;
-              const isSelected = selectedArangam === arangamId;
-              const isHovered = hoveredArangam === arangamId;
-              const arangamNames = {
-                1: "VOC Arangam",
-                2: "Thiruvalluvar Arangam",
-                3: "Bharathiyar Arangam",
-                4: "Vivekananda Arangam",
-                5: "Ramakrishna Arangam"
-              };
-              const arangamName = arangamNames[num as keyof typeof arangamNames];
+            {arangams.map((arangam) => {
+              const isSelected = selectedArangam === arangam.id;
 
               return (
                 <div
-                  key={arangamId}
+                  key={arangam.id}
                   className={`relative p-4 rounded-lg border-2 transition-all duration-300 text-center flex flex-col items-center justify-center min-h-[100px] w-full gap-2 ${isSelected
                     ? "border-green-500 bg-green-50 shadow-lg"
                     : "border-border bg-card hover:border-green-300 hover:shadow-md"
@@ -200,12 +207,12 @@ const SlotSelector = ({
                 >
                   <div className={`text-base font-bold transition-colors duration-300 ${isSelected ? "text-green-700" : "text-gray-600"
                     }`}>
-                    {arangamName}
+                    {arangam.name}
                   </div>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      onArangamSelect?.(arangamId);
+                      onArangamSelect?.(arangam.id);
                     }}
                     className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold rounded-md transition-colors duration-200"
                   >

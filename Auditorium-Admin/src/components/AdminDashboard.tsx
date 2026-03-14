@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react'
-import { Users, Calendar, Building2, Settings, LogOut, CheckCircle, XCircle, Shield, Download, Edit, Plus, Trash2, RotateCcw, Key } from 'lucide-react'
+import { Users, Calendar, Building2, Settings, LogOut, Download, Edit, Plus, Trash2, RotateCcw, Key } from 'lucide-react'
 import { BookingService } from '../services/bookingService'
 import { ArangamService } from '../services/arangamService'
 import { AdminService } from '../services/adminService'
+import { supabase } from '../lib/supabase'
 import type { Arangam } from '../lib/supabase'
 import * as XLSX from 'xlsx'
 
 interface AdminDashboardProps {
   onLogout: () => void
+  currentUsername: string
 }
 
 interface BookingData {
@@ -27,7 +29,7 @@ interface BookingData {
   remarks?: string
 }
 
-const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
+const AdminDashboard = ({ onLogout, currentUsername }: AdminDashboardProps) => {
   const [bookings, setBookings] = useState<BookingData[]>([])
   const [stats, setStats] = useState({
     totalBookings: 0,
@@ -41,7 +43,6 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
   const [arangams, setArangams] = useState<Arangam[]>([])
   const [newArangamName, setNewArangamName] = useState('')
   const [editingArangam, setEditingArangam] = useState<{ id: string; name: string } | null>(null)
-  const [currentUsername, setCurrentUsername] = useState('Admin')
   const [newUsername, setNewUsername] = useState('')
   const [newPassword, setNewPassword] = useState('')
 
@@ -49,17 +50,23 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
     fetchBookings()
     fetchArangams()
 
-    // Set up real-time subscription
-    const unsubscribe = BookingService.subscribeToBookings(() => {
+    // Set up real-time subscription for bookings
+    const unsubscribeBookings = BookingService.subscribeToBookings(() => {
       setIsRealTimeConnected(true)
-      fetchBookings() // Refresh data when changes occur
+      fetchBookings()
     })
 
-    // Set connection status
+    // Set up real-time subscription for arangams
+    const arangamChannel = supabase
+      .channel('admin-arangams-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'arangams' }, () => fetchArangams())
+      .subscribe()
+
     setIsRealTimeConnected(true)
 
     return () => {
-      unsubscribe()
+      unsubscribeBookings()
+      arangamChannel.unsubscribe()
       setIsRealTimeConnected(false)
     }
   }, [])
@@ -84,7 +91,7 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
     setStats({
       totalBookings: bookingsData.length,
       pendingBookings: bookingsData.filter(b => b.status === 'pending').length,
-      approvedBookings: bookingsData.filter(b => b.status === 'approved').length,
+      approvedBookings: bookingsData.filter(b => b.status === 'booked' || b.status === 'approved').length,
       todayBookings: bookingsData.filter(b => b.booking_date === today).length
     })
   }
@@ -231,10 +238,10 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
     const result = await AdminService.updateCredentials(currentUsername, newUsername.trim(), newPassword.trim())
     if (result.success) {
       alert('Credentials updated successfully. Please login again with new credentials.')
-      setCurrentUsername(newUsername.trim())
       setNewUsername('')
       setNewPassword('')
-      setTimeout(() => onLogout(), 2000)
+      localStorage.removeItem('adminUsername')
+      setTimeout(() => onLogout(), 1500)
     } else {
       alert(`Failed to update credentials: ${result.error}`)
     }
@@ -263,27 +270,38 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
       {/* Header */}
       <header className="bg-gradient-to-r from-green-800 via-green-700 to-emerald-800 shadow-2xl border-b-4 border-orange-500 relative z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col sm:flex-row justify-between items-center py-4 sm:py-6 gap-4">
-            <div className="text-center sm:text-left">
-              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-white flex items-center gap-2 justify-center sm:justify-start">
-                <Shield className="w-6 h-6 sm:w-7 sm:h-7" />
-                Admin Dashboard
-                {isRealTimeConnected && (
-                  <div className="flex items-center gap-1 ml-2">
-                    <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                    <span className="text-xs text-green-200">Live</span>
-                  </div>
-                )}
-              </h1>
-              <p className="text-green-100 text-xs sm:text-sm mt-1">Arangam Booking Management System</p>
+          <div className="relative flex items-center justify-center py-4 sm:py-6">
+
+            {/* Logo — left */}
+            <div className="absolute left-0 flex items-center">
+              <div className="bg-white rounded-full shadow-lg p-1 sm:p-1.5 md:p-2">
+                <img
+                  src="/MEC-NKL1_logo.png"
+                  alt="Mahendra Engineering College"
+                  className="w-10 h-10 sm:w-14 sm:h-14 md:w-16 md:h-16 lg:w-20 lg:h-20 object-contain"
+                />
+              </div>
             </div>
-            <button
-              onClick={onLogout}
-              className="flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-white hover:text-orange-100 bg-green-700 border-2 border-green-600 rounded-lg hover:bg-green-600 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 font-medium text-sm sm:text-base"
-            >
-              <LogOut className="w-4 h-4 sm:w-5 sm:h-5" />
-              Logout
-            </button>
+
+            {/* Centre — title */}
+            <div className="text-center px-24 sm:px-32">
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-white flex items-center justify-center gap-2">
+                Admin Dashboard
+              </h1>
+              <p className="text-green-100 text-xs sm:text-sm mt-1 text-center whitespace-nowrap">Arangam Booking Management System</p>
+            </div>
+
+            {/* Logout — right */}
+            <div className="absolute right-0">
+              <button
+                onClick={onLogout}
+                className="flex items-center gap-2 px-3 sm:px-5 py-2 sm:py-3 text-white hover:text-orange-100 bg-green-700 border-2 border-green-600 rounded-lg hover:bg-green-600 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 font-medium text-sm sm:text-base"
+              >
+                <LogOut className="w-4 h-4 sm:w-5 sm:h-5" />
+                <span className="hidden sm:inline">Logout</span>
+              </button>
+            </div>
+
           </div>
         </div>
       </header>
@@ -291,24 +309,24 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 relative z-10">
         {/* Navigation Tabs */}
         <div className="mb-6 sm:mb-8">
-          <nav className="flex flex-col sm:flex-row sm:space-x-2 md:space-x-4 lg:space-x-8 space-y-2 sm:space-y-0 bg-white/80 backdrop-blur-sm p-2 sm:p-4 rounded-xl shadow-lg border border-gray-200">
+          <nav className="grid grid-cols-2 gap-3">
             {[
               { id: 'overview', label: 'Overview', icon: Calendar },
-              { id: 'bookings', label: 'Manage Bookings', icon: Building2 },
               { id: 'customize', label: 'Customize', icon: Edit },
+              { id: 'bookings', label: 'Manage Bookings', icon: Building2 },
               { id: 'settings', label: 'Settings', icon: Settings }
             ].map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
                 onClick={() => setActiveTab(id)}
-                className={`flex items-center justify-center sm:justify-start gap-2 px-3 sm:px-4 py-2 sm:py-3 text-sm md:text-base font-semibold rounded-lg transition-all duration-300 ${activeTab === id
-                  ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-lg transform scale-105'
-                  : 'text-gray-700 hover:text-green-700 hover:bg-green-50 border border-transparent hover:border-green-200'
-                  }`}
+                className={`flex items-center justify-center gap-2 px-3 sm:px-4 py-4 sm:py-5 text-sm sm:text-base font-semibold rounded-2xl border-2 transition-all duration-300 shadow-md hover:shadow-xl transform hover:-translate-y-0.5 ${
+                  activeTab === id
+                    ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white border-green-500 shadow-lg'
+                    : 'bg-white/90 text-gray-700 border-gray-200 hover:text-green-700 hover:bg-green-50 hover:border-green-300'
+                }`}
               >
-                <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
-                <span className="hidden sm:inline">{label}</span>
-                <span className="sm:hidden">{label.split(' ')[0]}</span>
+                <Icon className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+                <span>{label}</span>
               </button>
             ))}
           </nav>

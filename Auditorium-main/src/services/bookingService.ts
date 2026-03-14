@@ -231,6 +231,16 @@ export class BookingService {
     }
   }
 
+  // Subscribe to real-time booking changes
+  static subscribeToBookings(callback: () => void) {
+    const channel = supabase
+      .channel('main-bookings-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, callback)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'mg_auditorium_bookings' }, callback)
+      .subscribe()
+    return () => channel.unsubscribe()
+  }
+
   // Delete booking
   static async deleteBooking(id: string): Promise<{ success: boolean; error?: string }> {
     try {

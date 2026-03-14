@@ -1,27 +1,26 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import AdminLogin from './components/AdminLogin'
 import AdminDashboard from './components/AdminDashboard'
 
-
 function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(() => {
-    return localStorage.getItem('adminLoggedIn') === 'true'
+  const [loggedInUsername, setLoggedInUsername] = useState<string | null>(() => {
+    return localStorage.getItem('adminUsername')
   })
 
-  const handleLogin = () => {
-    setIsLoggedIn(true)
-    localStorage.setItem('adminLoggedIn', 'true')
+  const handleLogin = (username: string) => {
+    setLoggedInUsername(username)
+    localStorage.setItem('adminUsername', username)
   }
 
   const handleLogout = () => {
-    setIsLoggedIn(false)
-    localStorage.removeItem('adminLoggedIn')
+    setLoggedInUsername(null)
+    localStorage.removeItem('adminUsername')
   }
 
   return (
     <div className="App">
-      {isLoggedIn ? (
-        <AdminDashboard onLogout={handleLogout} />
+      {loggedInUsername ? (
+        <AdminDashboard onLogout={handleLogout} currentUsername={loggedInUsername} />
       ) : (
         <AdminLogin onLogin={handleLogin} />
       )}

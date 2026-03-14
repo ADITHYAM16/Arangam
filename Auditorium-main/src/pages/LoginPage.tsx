@@ -91,8 +91,8 @@ const LoginPage = () => {
               />
             </div>
             <div className="text-center">
-              <h1 className="font-display text-3xl font-bold text-red-900 mb-2">MEC Arangam</h1>
-              <p className="text-lg text-gray-600 font-medium">Faculty Portal</p>
+              <h1 className="font-display text-3xl font-bold text-red-900 mb-1">Mahendra Engineering College</h1>
+              <p className="text-base font-semibold text-red-900">(Autonomous)</p>
             </div>
           </div>
           <div className="flex items-center justify-center gap-2 text-sm text-white bg-sky-500 px-6 py-3 rounded-full inline-flex shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300">
