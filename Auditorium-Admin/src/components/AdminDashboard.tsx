@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Users, Calendar, Building2, Settings, LogOut, Download, Edit, Plus, Trash2, RotateCcw, Key } from 'lucide-react'
+import { Calendar, Building2, Settings, LogOut, Download, Edit, Plus, Trash2, RotateCcw, Key } from 'lucide-react'
 import { BookingService } from '../services/bookingService'
 import { ArangamService } from '../services/arangamService'
 import { AdminService } from '../services/adminService'
@@ -33,13 +33,10 @@ const AdminDashboard = ({ onLogout, currentUsername }: AdminDashboardProps) => {
   const [bookings, setBookings] = useState<BookingData[]>([])
   const [stats, setStats] = useState({
     totalBookings: 0,
-    pendingBookings: 0,
-    approvedBookings: 0,
     todayBookings: 0
   })
   const [activeTab, setActiveTab] = useState('overview')
   const [loading, setLoading] = useState(true)
-  const [isRealTimeConnected, setIsRealTimeConnected] = useState(false)
   const [arangams, setArangams] = useState<Arangam[]>([])
   const [newArangamName, setNewArangamName] = useState('')
   const [editingArangam, setEditingArangam] = useState<{ id: string; name: string } | null>(null)
@@ -52,7 +49,6 @@ const AdminDashboard = ({ onLogout, currentUsername }: AdminDashboardProps) => {
 
     // Set up real-time subscription for bookings
     const unsubscribeBookings = BookingService.subscribeToBookings(() => {
-      setIsRealTimeConnected(true)
       fetchBookings()
     })
 
@@ -62,12 +58,9 @@ const AdminDashboard = ({ onLogout, currentUsername }: AdminDashboardProps) => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'arangams' }, () => fetchArangams())
       .subscribe()
 
-    setIsRealTimeConnected(true)
-
     return () => {
       unsubscribeBookings()
       arangamChannel.unsubscribe()
-      setIsRealTimeConnected(false)
     }
   }, [])
 
@@ -90,24 +83,8 @@ const AdminDashboard = ({ onLogout, currentUsername }: AdminDashboardProps) => {
     const today = new Date().toLocaleDateString('en-CA')
     setStats({
       totalBookings: bookingsData.length,
-      pendingBookings: bookingsData.filter(b => b.status === 'pending').length,
-      approvedBookings: bookingsData.filter(b => b.status === 'booked' || b.status === 'approved').length,
       todayBookings: bookingsData.filter(b => b.booking_date === today).length
     })
-  }
-
-  const updateBookingStatus = async (id: string, status: 'approved' | 'rejected') => {
-    try {
-      const result = await BookingService.updateBookingStatus(id, status)
-      if (result.success) {
-        // Data will be automatically refreshed via real-time subscription
-        alert(`Booking ${status} successfully`)
-      } else {
-        alert(`Failed to update booking: ${result.error}`)
-      }
-    } catch (error) {
-      alert('Failed to update booking status')
-    }
   }
 
   const downloadAllBookings = async () => {

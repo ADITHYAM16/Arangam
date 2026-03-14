@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Shield, Eye, EyeOff, ArrowLeft, KeyRound, CheckCircle2 } from 'lucide-react'
+import { Eye, EyeOff, ArrowLeft, KeyRound, CheckCircle2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 interface AdminLoginProps {

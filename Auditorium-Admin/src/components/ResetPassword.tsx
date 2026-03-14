@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Shield, Eye, EyeOff } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
